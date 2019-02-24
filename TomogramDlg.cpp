@@ -92,5 +92,37 @@ HCURSOR CTomogramDlg::OnQueryDragIcon()
 
 void CTomogramDlg::OnBnClickedLoad()
 {
-	// TODO: добавьте свой код обработчика уведомлений
+	LoadPicture();
+	imageDrawer.Invalidate();
+}
+
+void CTomogramDlg::LoadPicture()
+{
+	CFileDialog fd(true, NULL, NULL, OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY |
+		OFN_LONGNAMES | OFN_PATHMUSTEXIST, _T("Image Files (*.bmp)|*.bmp|All Files (*.*)|*.*||"), NULL, 0, TRUE);
+
+	if (fd.DoModal() != IDOK)
+	{
+		MessageBox(L"ERROR!!!", L"Error opening picture file.", MB_ICONERROR);
+	};
+
+	CString pathBMP = fd.GetPathName();
+	Bitmap bmp(pathBMP);
+	int width = bmp.GetWidth();
+	int height = bmp.GetHeight();
+	_image.clear();
+
+	for (size_t i = 0; i < height; i++)
+	{
+		std::vector<float> bufPix;
+		for (size_t j = 0; j < width; j++)
+		{
+			double value;
+			Color color;
+			bmp.GetPixel(j, height - i - 1, &color);
+			value = 0.299*color.GetRed() + 0.587*color.GetGreen() + 0.114*color.GetBlue();
+			bufPix.push_back(value);
+		}
+		_image.push_back(bufPix);
+	}
 }

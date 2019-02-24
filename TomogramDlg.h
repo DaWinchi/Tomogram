@@ -34,6 +34,7 @@ protected:
 	DECLARE_MESSAGE_MAP()
 public:
 	afx_msg void OnBnClickedLoad();
+	void LoadPicture();
 	Draw2D imageDrawer;
 	std::vector<std::vector<float>> _image;
 
