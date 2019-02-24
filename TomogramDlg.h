@@ -35,7 +35,12 @@ protected:
 public:
 	afx_msg void OnBnClickedLoad();
 	void LoadPicture();
+	void RotateImage(double angle, const std::vector<std::vector<float>> & dataIn, std::vector<std::vector<float>> & dataOut);
+	void IncreaseSizeImage();
 	Draw2D imageDrawer;
 	std::vector<std::vector<float>> _image;
+	std::vector<std::vector<float>> _imageIncreased;
 
+	std::vector<std::vector<float>> _imageRotated;
+	afx_msg void OnBnClickedButton2();
 };

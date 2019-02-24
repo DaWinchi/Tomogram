@@ -32,6 +32,7 @@ BEGIN_MESSAGE_MAP(CTomogramDlg, CDialogEx)
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
 	ON_BN_CLICKED(IDC_LOAD, &CTomogramDlg::OnBnClickedLoad)
+	ON_BN_CLICKED(IDC_BUTTON2, &CTomogramDlg::OnBnClickedButton2)
 END_MESSAGE_MAP()
 
 
@@ -93,6 +94,8 @@ HCURSOR CTomogramDlg::OnQueryDragIcon()
 void CTomogramDlg::OnBnClickedLoad()
 {
 	LoadPicture();
+	IncreaseSizeImage();
+	imageDrawer._image = &_imageIncreased;
 	imageDrawer.Invalidate();
 }
 
@@ -125,4 +128,63 @@ void CTomogramDlg::LoadPicture()
 		}
 		_image.push_back(bufPix);
 	}
+}
+
+void CTomogramDlg::RotateImage(double angle, const std::vector<std::vector<float>> & dataIn, std::vector<std::vector<float>> & dataOut)
+{
+	const int size = dataIn.size();
+	dataOut.clear();
+	std::vector<float> row(size);
+	dataOut.resize(size, row);
+
+	Matrix matrix;
+	Point pointNew;
+	const Point center(size / 2, size / 2);
+	matrix.Translate(center.X, center.Y);
+	matrix.Rotate(angle);
+
+	Rect rect(0, 0, size, size);
+#pragma omp parallel for
+	for (int y = 0; y < size; y++)
+	{
+		for (int x = 0; x < size; x++)
+		{
+			pointNew.X = x - center.X;
+			pointNew.Y = y - center.Y;
+			matrix.TransformPoints(&pointNew);
+			if (!rect.Contains(pointNew)) continue;
+			dataOut[y][x] = dataIn[pointNew.Y][pointNew.X];
+		}
+	}
+}
+
+void CTomogramDlg::IncreaseSizeImage()
+{
+	const int sizeNew = (int)sqrt(_image.size()*_image.size() + _image[0].size()*_image[0].size());
+	const int widthOld = _image[0].size(),
+		heightOld = _image.size();
+	const int sizeNewHalf = sizeNew / 2;
+
+	_imageIncreased.clear();
+	std::vector<float> row(sizeNew);
+	_imageIncreased.resize(sizeNew, row);
+
+#pragma omp parallel for
+	for (int y = 0; y < heightOld; y++)
+	{
+		for (int x = 0; x < widthOld; x++)
+		{
+			_imageIncreased[y + sizeNewHalf - heightOld / 2][x + sizeNewHalf - widthOld / 2] = _image[y][x];
+		}
+	}
+}
+
+
+
+void CTomogramDlg::OnBnClickedButton2()
+{
+	//std::copy(_imageIncreased.begin(), _imageIncreased.end(), _imageRotated);
+	RotateImage(45, _imageIncreased, _imageRotated);
+	imageDrawer._image = &_imageRotated;
+	imageDrawer.Invalidate();
 }
