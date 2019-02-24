@@ -25,11 +25,13 @@ CTomogramDlg::CTomogramDlg(CWnd* pParent /*=nullptr*/)
 void CTomogramDlg::DoDataExchange(CDataExchange* pDX)
 {
 	CDialogEx::DoDataExchange(pDX);
+	DDX_Control(pDX, IDC_IMAGE, imageDrawer);
 }
 
 BEGIN_MESSAGE_MAP(CTomogramDlg, CDialogEx)
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
+	ON_BN_CLICKED(IDC_LOAD, &CTomogramDlg::OnBnClickedLoad)
 END_MESSAGE_MAP()
 
 
@@ -45,6 +47,7 @@ BOOL CTomogramDlg::OnInitDialog()
 	SetIcon(m_hIcon, FALSE);		// Мелкий значок
 
 	// TODO: добавьте дополнительную инициализацию
+	imageDrawer._image = &_image;
 
 	return TRUE;  // возврат значения TRUE, если фокус не передан элементу управления
 }
@@ -85,3 +88,9 @@ HCURSOR CTomogramDlg::OnQueryDragIcon()
 	return static_cast<HCURSOR>(m_hIcon);
 }
 
+
+
+void CTomogramDlg::OnBnClickedLoad()
+{
+	// TODO: добавьте свой код обработчика уведомлений
+}

@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "Draw2D.h"
+
 
 // Диалоговое окно CTomogramDlg
 class CTomogramDlg : public CDialogEx
@@ -30,4 +32,9 @@ protected:
 	afx_msg void OnPaint();
 	afx_msg HCURSOR OnQueryDragIcon();
 	DECLARE_MESSAGE_MAP()
+public:
+	afx_msg void OnBnClickedLoad();
+	Draw2D imageDrawer;
+	std::vector<std::vector<float>> _image;
+
 };
