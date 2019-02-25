@@ -76,6 +76,10 @@ void Draw2D::DrawItem(LPDRAWITEMSTRUCT RECT)
 		}
 		gr.DrawImage(&bmp, 0, 0);
 	}
+	else
+	{
+		gr.Clear(Color::Black);
+	}
 }
 
 REAL Draw2D::X(LPDRAWITEMSTRUCT RECT, float x)

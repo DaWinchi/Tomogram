@@ -142,34 +142,6 @@ void CTomogramDlg::LoadPicture()
 	}
 }
 
-//void CTomogramDlg::RotateImage(double angle, const imageType & dataIn, imageType & dataOut)
-//{
-//	const int size = dataIn.size();
-//	dataOut.clear();
-//	std::vector<float> row(size);
-//	dataOut.resize(size, row);
-//
-//	Matrix matrix;
-//	Point pointNew;
-//	const Point center(size / 2, size / 2);
-//	matrix.Translate(center.X, center.Y);
-//	matrix.Rotate(angle);
-//
-//	Rect rect(0, 0, size, size);
-////#pragma omp parallel for
-//	for (int y = 0; y < size; y++)
-//	{
-//		for (int x = 0; x < size; x++)
-//		{
-//			pointNew.X = x - center.X;
-//			pointNew.Y = y - center.Y;
-//			matrix.TransformPoints(&pointNew);
-//			if (!rect.Contains(pointNew)) continue;
-//			dataOut[y][x] = dataIn[pointNew.Y][pointNew.X];
-//		}
-//	}
-//}
-
 void CTomogramDlg::RotateImage(double angle, const imageType & dataIn,
 	imageType & dataOut, const std::vector<size_t> &indexes)
 {
@@ -185,8 +157,6 @@ void CTomogramDlg::RotateImage(double angle, const imageType & dataIn,
 	matrix.Rotate(angle);
 
 	Rect rect(0, 0, size, size);
-	//#pragma omp parallel for
-
 	for (size_t y = 0; y < indexes.size(); y++)
 	{
 		for (int x = 0; x < size; x++)
