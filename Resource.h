@@ -8,6 +8,7 @@
 #define IDC_IMAGE                       1001
 #define IDC_BUTTON1                     1003
 #define IDC_TOMOGRAM                    1003
+#define IDC_IMAGE2                      1004
 
 // Next default values for new objects
 // 

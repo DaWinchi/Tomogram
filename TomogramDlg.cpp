@@ -27,6 +27,7 @@ void CTomogramDlg::DoDataExchange(CDataExchange* pDX)
 {
 	CDialogEx::DoDataExchange(pDX);
 	DDX_Control(pDX, IDC_IMAGE, imageDrawer);
+	DDX_Control(pDX, IDC_IMAGE2, drawerTomogram);
 }
 
 BEGIN_MESSAGE_MAP(CTomogramDlg, CDialogEx)
@@ -50,6 +51,7 @@ BOOL CTomogramDlg::OnInitDialog()
 
 	// TODO: добавьте дополнительную инициализацию
 	imageDrawer._image = &_image;
+	drawerTomogram._image = &_imageTomogram;
 
 	return TRUE;  // возврат значения TRUE, если фокус не передан элементу управления
 }
@@ -232,5 +234,22 @@ std::vector<float> CTomogramDlg::CreateTomogramRow(double angle, const std::vect
 
 void CTomogramDlg::OnBnClickedTomogram()
 {
-	// TODO: добавьте свой код обработчика уведомлений
+	const size_t step = 10;
+	const double angleStep = 5.0;
+	std::vector<size_t> indexes;
+	_imageTomogram.clear();
+
+	//Create indexes of columns for radon converting
+	for (size_t i = 0; i < _imageIncreased.size(); i+=step)
+	{
+		indexes.push_back(i);
+	}
+
+	for (double angle = 0; angle < 90; angle += angleStep)
+	{
+		auto row = CreateTomogramRow(angle, indexes);
+		_imageTomogram.push_back(row);
+	}
+	
+	drawerTomogram.Invalidate();
 }

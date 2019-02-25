@@ -40,8 +40,10 @@ public:
 	void IncreaseSizeImage();
 	std::vector<float> CreateTomogramRow(double angle, const std::vector<size_t> &indexes);
 	Draw2D imageDrawer;
-	std::vector<std::vector<float>> _image;
-	std::vector<std::vector<float>> _imageIncreased;
+	Draw2D drawerTomogram;
+	imageType _image;
+	imageType _imageIncreased;
+	imageType _imageTomogram;
 
 	std::vector<std::vector<float>> _imageRotated;
 	afx_msg void OnBnClickedButton2();
