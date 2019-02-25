@@ -6,6 +6,7 @@
 #include "Tomogram.h"
 #include "TomogramDlg.h"
 #include "afxdialogex.h"
+#include <numeric>
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -32,7 +33,7 @@ BEGIN_MESSAGE_MAP(CTomogramDlg, CDialogEx)
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
 	ON_BN_CLICKED(IDC_LOAD, &CTomogramDlg::OnBnClickedLoad)
-	ON_BN_CLICKED(IDC_BUTTON2, &CTomogramDlg::OnBnClickedButton2)
+	ON_BN_CLICKED(IDC_TOMOGRAM, &CTomogramDlg::OnBnClickedTomogram)
 END_MESSAGE_MAP()
 
 
@@ -130,12 +131,41 @@ void CTomogramDlg::LoadPicture()
 	}
 }
 
-void CTomogramDlg::RotateImage(double angle, const std::vector<std::vector<float>> & dataIn, std::vector<std::vector<float>> & dataOut)
+//void CTomogramDlg::RotateImage(double angle, const imageType & dataIn, imageType & dataOut)
+//{
+//	const int size = dataIn.size();
+//	dataOut.clear();
+//	std::vector<float> row(size);
+//	dataOut.resize(size, row);
+//
+//	Matrix matrix;
+//	Point pointNew;
+//	const Point center(size / 2, size / 2);
+//	matrix.Translate(center.X, center.Y);
+//	matrix.Rotate(angle);
+//
+//	Rect rect(0, 0, size, size);
+////#pragma omp parallel for
+//	for (int y = 0; y < size; y++)
+//	{
+//		for (int x = 0; x < size; x++)
+//		{
+//			pointNew.X = x - center.X;
+//			pointNew.Y = y - center.Y;
+//			matrix.TransformPoints(&pointNew);
+//			if (!rect.Contains(pointNew)) continue;
+//			dataOut[y][x] = dataIn[pointNew.Y][pointNew.X];
+//		}
+//	}
+//}
+
+void CTomogramDlg::RotateImage(double angle, const imageType & dataIn,
+	imageType & dataOut, const std::vector<size_t> &indexes)
 {
 	const int size = dataIn.size();
 	dataOut.clear();
 	std::vector<float> row(size);
-	dataOut.resize(size, row);
+	dataOut.resize(indexes.size(), row);
 
 	Matrix matrix;
 	Point pointNew;
@@ -144,13 +174,14 @@ void CTomogramDlg::RotateImage(double angle, const std::vector<std::vector<float
 	matrix.Rotate(angle);
 
 	Rect rect(0, 0, size, size);
-#pragma omp parallel for
-	for (int y = 0; y < size; y++)
+	//#pragma omp parallel for
+
+	for (size_t y = 0; y < indexes.size(); y++)
 	{
 		for (int x = 0; x < size; x++)
 		{
 			pointNew.X = x - center.X;
-			pointNew.Y = y - center.Y;
+			pointNew.Y = indexes[y] - center.Y;
 			matrix.TransformPoints(&pointNew);
 			if (!rect.Contains(pointNew)) continue;
 			dataOut[y][x] = dataIn[pointNew.Y][pointNew.X];
@@ -181,10 +212,25 @@ void CTomogramDlg::IncreaseSizeImage()
 
 
 
-void CTomogramDlg::OnBnClickedButton2()
+std::vector<float> CTomogramDlg::CreateTomogramRow(double angle, const std::vector<size_t> &indexes)
 {
-	//std::copy(_imageIncreased.begin(), _imageIncreased.end(), _imageRotated);
-	RotateImage(45, _imageIncreased, _imageRotated);
-	imageDrawer._image = &_imageRotated;
-	imageDrawer.Invalidate();
+	std::vector<float> outRow(indexes.size());
+	imageType rotatedCols;
+
+	//Rotate columns by indexes
+	RotateImage(angle, _imageIncreased, rotatedCols, indexes);
+
+	//Get point of Radon converting
+	for (size_t i = 0; i < indexes.size(); i++)
+	{
+		outRow[i] = std::accumulate(rotatedCols[i].begin(), rotatedCols[i].end(), 0);
+	}
+
+	return outRow;
+}
+
+
+void CTomogramDlg::OnBnClickedTomogram()
+{
+	// TODO: добавьте свой код обработчика уведомлений
 }

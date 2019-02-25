@@ -35,12 +35,15 @@ protected:
 public:
 	afx_msg void OnBnClickedLoad();
 	void LoadPicture();
-	void RotateImage(double angle, const std::vector<std::vector<float>> & dataIn, std::vector<std::vector<float>> & dataOut);
+	typedef std::vector<std::vector<float>> imageType;
+	void RotateImage(double angle, const imageType & dataIn, imageType & dataOut, const std::vector<size_t> &indexes);
 	void IncreaseSizeImage();
+	std::vector<float> CreateTomogramRow(double angle, const std::vector<size_t> &indexes);
 	Draw2D imageDrawer;
 	std::vector<std::vector<float>> _image;
 	std::vector<std::vector<float>> _imageIncreased;
 
 	std::vector<std::vector<float>> _imageRotated;
 	afx_msg void OnBnClickedButton2();
+	afx_msg void OnBnClickedTomogram();
 };
