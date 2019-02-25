@@ -7,6 +7,7 @@
 #include "TomogramDlg.h"
 #include "afxdialogex.h"
 #include <numeric>
+#include <algorithm>
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -245,11 +246,32 @@ void CTomogramDlg::OnBnClickedTomogram()
 		indexes.push_back(i);
 	}
 
-	for (double angle = 0; angle < 90; angle += angleStep)
+	for (double angle = 0; angle < 180; angle += angleStep)
 	{
 		auto row = CreateTomogramRow(angle, indexes);
 		_imageTomogram.push_back(row);
 	}
 	
+	NormalizeAmplitude(_imageTomogram);
 	drawerTomogram.Invalidate();
+}
+
+void CTomogramDlg::NormalizeAmplitude(imageType &data)
+{
+	float max = 0;
+	for (size_t i = 0; i < data.size(); i++)
+	{
+		float local_max = *std::max_element(data[i].begin(), data[i].end());
+		max = local_max > max ? local_max : max;
+	}
+
+#pragma omp parallel for
+	for (int i = 0; i < data.size(); i++)
+	{
+		for (int j = 0; j < data[i].size(); j++)
+		{
+			data[i][j] = data[i][j] / max * 255.0;
+		}
+	}
+	
 }

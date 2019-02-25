@@ -39,6 +39,7 @@ public:
 	void RotateImage(double angle, const imageType & dataIn, imageType & dataOut, const std::vector<size_t> &indexes);
 	void IncreaseSizeImage();
 	std::vector<float> CreateTomogramRow(double angle, const std::vector<size_t> &indexes);
+	void NormalizeAmplitude(imageType &data);
 	Draw2D imageDrawer;
 	Draw2D drawerTomogram;
 	imageType _image;
@@ -46,6 +47,5 @@ public:
 	imageType _imageTomogram;
 
 	std::vector<std::vector<float>> _imageRotated;
-	afx_msg void OnBnClickedButton2();
 	afx_msg void OnBnClickedTomogram();
 };
