@@ -48,4 +48,9 @@ public:
 
 	std::vector<std::vector<float>> _imageRotated;
 	afx_msg void OnBnClickedTomogram();
+	CStatic _resolutionText;
+	int _step_d;
+	double _step_a;
+	CStatic _resolutionTomText;
+	double _angle_max;
 };

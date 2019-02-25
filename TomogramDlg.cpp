@@ -20,6 +20,9 @@
 
 CTomogramDlg::CTomogramDlg(CWnd* pParent /*=nullptr*/)
 	: CDialogEx(IDD_TOMOGRAM_DIALOG, pParent)
+	, _step_d(5)
+	, _step_a(5)
+	, _angle_max(180)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 }
@@ -29,6 +32,11 @@ void CTomogramDlg::DoDataExchange(CDataExchange* pDX)
 	CDialogEx::DoDataExchange(pDX);
 	DDX_Control(pDX, IDC_IMAGE, imageDrawer);
 	DDX_Control(pDX, IDC_IMAGE2, drawerTomogram);
+	DDX_Control(pDX, IDC_RESOLUTION, _resolutionText);
+	DDX_Text(pDX, IDC_STEP_D, _step_d);
+	DDX_Text(pDX, IDC_STEP_A, _step_a);
+	DDX_Control(pDX, IDC_RESOLUTION2, _resolutionTomText);
+	DDX_Text(pDX, IDC_MAX_ANGLE, _angle_max);
 }
 
 BEGIN_MESSAGE_MAP(CTomogramDlg, CDialogEx)
@@ -211,6 +219,15 @@ void CTomogramDlg::IncreaseSizeImage()
 			_imageIncreased[y + sizeNewHalf - heightOld / 2][x + sizeNewHalf - widthOld / 2] = _image[y][x];
 		}
 	}
+
+	int widthText = _imageIncreased[0].size(),
+		heightText = _imageIncreased.size();
+	CString str, arg1, arg2;
+	str = "Resolution: ";
+	arg1.Format(_T("%d"), widthText);
+	arg2.Format(_T("%d"), heightText);
+	str += arg1 + "x" + arg2;
+	_resolutionText.SetWindowTextW(str);
 }
 
 
@@ -235,8 +252,9 @@ std::vector<float> CTomogramDlg::CreateTomogramRow(double angle, const std::vect
 
 void CTomogramDlg::OnBnClickedTomogram()
 {
-	const size_t step = 10;
-	const double angleStep = 5.0;
+	UpdateData(TRUE);
+	const size_t step = _step_d;
+	const double angleStep = _step_a;
 	std::vector<size_t> indexes;
 	_imageTomogram.clear();
 
@@ -246,7 +264,7 @@ void CTomogramDlg::OnBnClickedTomogram()
 		indexes.push_back(i);
 	}
 
-	for (double angle = 0; angle < 180; angle += angleStep)
+	for (double angle = 0; angle < _angle_max; angle += angleStep)
 	{
 		auto row = CreateTomogramRow(angle, indexes);
 		_imageTomogram.push_back(row);
@@ -254,6 +272,15 @@ void CTomogramDlg::OnBnClickedTomogram()
 	
 	NormalizeAmplitude(_imageTomogram);
 	drawerTomogram.Invalidate();
+	int widthText = _imageTomogram[0].size(),
+		heightText = _imageTomogram.size();
+	CString str, arg1, arg2;
+	str = "Resolution: ";
+	arg1.Format(_T("%d"), widthText);
+	arg2.Format(_T("%d"), heightText);
+	str += arg1 + "x" + arg2;
+	str += " (n_projection x n_angle)";
+	_resolutionTomText.SetWindowTextW(str);
 }
 
 void CTomogramDlg::NormalizeAmplitude(imageType &data)
