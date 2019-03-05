@@ -37,6 +37,7 @@ void CTomogramDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Text(pDX, IDC_STEP_A, _step_a);
 	DDX_Control(pDX, IDC_RESOLUTION2, _resolutionTomText);
 	DDX_Text(pDX, IDC_MAX_ANGLE, _angle_max);
+	DDX_Control(pDX, IDC_IMAGE3, _drawerRestored);
 }
 
 BEGIN_MESSAGE_MAP(CTomogramDlg, CDialogEx)

@@ -53,4 +53,5 @@ public:
 	double _step_a;
 	CStatic _resolutionTomText;
 	double _angle_max;
+	Draw2D _drawerRestored;
 };

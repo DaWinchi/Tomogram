@@ -12,8 +12,8 @@
 #define IDC_STEP_D                      1006
 #define IDC_STEP_A                      1007
 #define IDC_RESOLUTION2                 1008
-#define IDC_STEP_A2                     1009
 #define IDC_MAX_ANGLE                   1009
+#define IDC_IMAGE3                      1010
 
 // Next default values for new objects
 // 
