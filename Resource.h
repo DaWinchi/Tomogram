@@ -14,6 +14,8 @@
 #define IDC_RESOLUTION2                 1008
 #define IDC_MAX_ANGLE                   1009
 #define IDC_IMAGE3                      1010
+#define IDC_TOMOGRAM2                   1011
+#define IDC_RESTORE                     1011
 
 // Next default values for new objects
 // 

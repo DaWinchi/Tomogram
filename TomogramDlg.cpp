@@ -45,6 +45,7 @@ BEGIN_MESSAGE_MAP(CTomogramDlg, CDialogEx)
 	ON_WM_QUERYDRAGICON()
 	ON_BN_CLICKED(IDC_LOAD, &CTomogramDlg::OnBnClickedLoad)
 	ON_BN_CLICKED(IDC_TOMOGRAM, &CTomogramDlg::OnBnClickedTomogram)
+	ON_BN_CLICKED(IDC_RESTORE, &CTomogramDlg::OnBnClickedRestore)
 END_MESSAGE_MAP()
 
 
@@ -171,6 +172,34 @@ void CTomogramDlg::RotateImage(double angle, const imageType & dataIn,
 	}
 }
 
+void CTomogramDlg::RotateFullImage(double angle, const imageType & dataIn,	imageType & dataOut)
+{
+	const int size = dataIn.size();
+	dataOut.clear();
+	std::vector<float> row(size);
+	dataOut.resize(size, row);
+
+	Matrix matrix;
+	Point pointNew;
+	const Point center(size / 2, size / 2);
+	matrix.Translate(center.X, center.Y);
+	matrix.Rotate(angle);
+
+	Rect rect(0, 0, size, size);
+	for (size_t y = 0; y < size; y++)
+	{
+		for (int x = 0; x < size; x++)
+		{
+			pointNew.X = x - center.X;
+			pointNew.Y = y - center.Y;
+			matrix.TransformPoints(&pointNew);
+			if (!rect.Contains(pointNew)) continue;
+			dataOut[y][x] = dataIn[pointNew.Y][pointNew.X];
+		}
+	}
+}
+
+
 void CTomogramDlg::IncreaseSizeImage()
 {
 	const int sizeNew = (int)sqrt(_image.size()*_image.size() + _image[0].size()*_image[0].size());
@@ -272,4 +301,55 @@ void CTomogramDlg::NormalizeAmplitude(imageType &data)
 		}
 	}
 	
+}
+
+void CTomogramDlg::BackProjection(imageType & dataOut)
+{
+	const double angleStep = _step_a;
+	const size_t step = _step_d;
+
+	const int size = _imageIncreased.size();
+	
+	dataOut.clear();
+	std::vector<float> row(size);
+	dataOut.resize(size, row);
+
+	std::vector<size_t> indexes;
+	imageType dataIn;
+	dataIn.resize(size, row);
+
+	for (size_t i = 0; i < _imageIncreased.size(); i += step)
+	{
+		indexes.push_back(i);
+	}
+
+	size_t numProjection = 0;
+	for (double angle = 0; angle < _angle_max; angle += angleStep)
+	{
+		RotateFullImage(angle, dataIn, dataOut);
+		
+		//
+		for (size_t row = 0; row < indexes.size(); row++)
+		{
+			double value = _imageTomogram[numProjection][row] / indexes.size();
+			for (size_t col = 0; col < dataOut[0].size(); col++)
+			{
+				dataOut[indexes[row]][col] += value;
+			}
+		}
+
+		RotateFullImage(-angle, dataOut, dataIn);
+		numProjection++;
+	}
+
+	//std::swap(dataIn, dataOut);
+}
+
+
+void CTomogramDlg::OnBnClickedRestore()
+{
+	BackProjection(_imageRestored);
+	NormalizeAmplitude(_imageRestored);
+	_drawerRestored._image = &_imageRestored;
+	_drawerRestored.RedrawWindow();
 }

@@ -37,14 +37,17 @@ public:
 	void LoadPicture();
 	typedef std::vector<std::vector<float>> imageType;
 	void RotateImage(double angle, const imageType & dataIn, imageType & dataOut, const std::vector<size_t> &indexes);
+	void RotateFullImage(double angle, const imageType & dataIn, imageType & dataOut);
 	void IncreaseSizeImage();
 	std::vector<float> CreateTomogramRow(double angle, const std::vector<size_t> &indexes);
+	void BackProjection(imageType & dataInOut);
 	void NormalizeAmplitude(imageType &data);
 	Draw2D imageDrawer;
 	Draw2D drawerTomogram;
 	imageType _image;
 	imageType _imageIncreased;
 	imageType _imageTomogram;
+	imageType _imageRestored;
 
 	std::vector<std::vector<float>> _imageRotated;
 	afx_msg void OnBnClickedTomogram();
@@ -54,4 +57,5 @@ public:
 	CStatic _resolutionTomText;
 	double _angle_max;
 	Draw2D _drawerRestored;
+	afx_msg void OnBnClickedRestore();
 };
