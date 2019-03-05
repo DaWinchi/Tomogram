@@ -329,10 +329,11 @@ void CTomogramDlg::BackProjection(imageType & dataOut)
 		RotateFullImage(angle, dataIn, dataOut);
 		
 		//
-		for (size_t row = 0; row < indexes.size(); row++)
+#pragma omp parallel for
+		for (int row = 0; row < indexes.size(); row++)
 		{
 			double value = _imageTomogram[numProjection][row] / indexes.size();
-			for (size_t col = 0; col < dataOut[0].size(); col++)
+			for (int col = 0; col < dataOut[0].size(); col++)
 			{
 				dataOut[indexes[row]][col] += value;
 			}
