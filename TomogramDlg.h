@@ -5,6 +5,8 @@
 #pragma once
 
 #include "Draw2D.h"
+#include<fftw3.h>
+#include <complex>
 
 
 // Диалоговое окно CTomogramDlg
@@ -41,6 +43,7 @@ public:
 	void IncreaseSizeImage();
 	std::vector<float> CreateTomogramRow(double angle, const std::vector<size_t> &indexes);
 	void BackProjection(imageType & dataInOut);
+	void FourierTransform(imageType & dataIn, imageType & dataSpectre);
 	void NormalizeAmplitude(imageType &data);
 	Draw2D imageDrawer;
 	Draw2D drawerTomogram;

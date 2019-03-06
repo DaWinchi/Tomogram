@@ -349,8 +349,50 @@ void CTomogramDlg::BackProjection(imageType & dataOut)
 
 void CTomogramDlg::OnBnClickedRestore()
 {
+	FourierTransform(_imageTomogram, _imageRestored);
 	BackProjection(_imageRestored);
 	NormalizeAmplitude(_imageRestored);
 	_drawerRestored._image = &_imageRestored;
 	_drawerRestored.RedrawWindow();
+	//FourierTransform(_imageTomogram, _imageRestored);
+}
+
+void CTomogramDlg::FourierTransform(imageType & dataIn, imageType & dataSpectre)
+{
+	const int nRows = dataIn.size();
+	const int nCols = dataIn[0].size();
+	for (int rowIdx = 0; rowIdx < nRows; rowIdx++)
+	{		
+		/*std::vector<complex<float>> row(nCols, 0);
+		for (int colIdx = 0; colIdx < nCols; colIdx++)
+		{
+			row[colIdx]._Val[0] = dataIn[rowIdx][colIdx];
+		}*/
+		fftw_complex* rowIn = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * nCols);
+		fftw_complex* rowOut = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * nCols);
+		for (int colIdx = 0; colIdx < nCols; colIdx++)
+		{
+			rowIn[colIdx][0] = dataIn[rowIdx][colIdx];
+			rowIn[colIdx][1] = 0;
+		}
+
+		/*fftw_plan plan = fftw_plan_dft_1d(row.size(), (fftw_complex*)&row[0],
+							(fftw_complex*)&row[0], FFTW_FORWARD, FFTW_ESTIMATE);*/
+
+		fftw_plan plan = fftw_plan_dft_1d(nCols, rowIn, rowOut, FFTW_FORWARD, FFTW_ESTIMATE);
+
+		fftw_execute(plan);
+		fftw_destroy_plan(plan);
+
+		for (int colIdx = 0; colIdx < nCols; colIdx++)
+		{
+			dataIn[rowIdx][colIdx] = sqrt(rowOut[colIdx][0]* rowOut[colIdx][0] +
+				rowOut[colIdx][1] * rowOut[colIdx][1]);
+		}
+
+		fftw_free(rowIn);
+		fftw_free(rowOut);
+
+	}
+	int k = 0;
 }
