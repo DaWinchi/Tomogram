@@ -5,7 +5,6 @@
 #pragma once
 
 #include "Draw2D.h"
-#include<fftw3.h>
 #include <complex>
 
 
@@ -29,6 +28,8 @@ public:
 protected:
 	HICON m_hIcon;
 
+	struct cmplx { float real; float image; };
+
 	// Созданные функции схемы сообщений
 	virtual BOOL OnInitDialog();
 	afx_msg void OnPaint();
@@ -43,7 +44,6 @@ public:
 	void IncreaseSizeImage();
 	std::vector<float> CreateTomogramRow(double angle, const std::vector<size_t> &indexes);
 	void BackProjection(imageType & dataInOut);
-	void FourierTransform(imageType & dataIn, imageType & dataSpectre);
 	void NormalizeAmplitude(imageType &data);
 	Draw2D imageDrawer;
 	Draw2D drawerTomogram;
@@ -51,6 +51,9 @@ public:
 	imageType _imageIncreased;
 	imageType _imageTomogram;
 	imageType _imageRestored;
+	imageType _imageRestoredReduced;
+
+	std::vector<std::vector<cmplx>> spectre_cmplx;
 
 	std::vector<std::vector<float>> _imageRotated;
 	afx_msg void OnBnClickedTomogram();
@@ -61,4 +64,15 @@ public:
 	double _angle_max;
 	Draw2D _drawerRestored;
 	afx_msg void OnBnClickedRestore();
+
+	void Fourie1D(std::vector<cmplx> *data, int n, int is);
+	void Fourie2D(std::vector<std::vector<cmplx>> &data, int is);
+	void FourierTransform(imageType &image, int flag);
+	void InterpolateImage(imageType &image, int &newWidth, int &newHeight);
+	bool CheckBin(int value, int &newvalue);
+	void NormilizeAmplitude(imageType &pData, int indentX, int indentY);
+	void AddFilter();
+	void ReduceImage(const imageType &dataIn, imageType &dataOut);
+	float _R;
+	size_t originalW, originalH, offsetX, offsetY;
 };

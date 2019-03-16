@@ -23,6 +23,7 @@ CTomogramDlg::CTomogramDlg(CWnd* pParent /*=nullptr*/)
 	, _step_d(5)
 	, _step_a(5)
 	, _angle_max(180)
+	, _R(10)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 }
@@ -38,6 +39,7 @@ void CTomogramDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_RESOLUTION2, _resolutionTomText);
 	DDX_Text(pDX, IDC_MAX_ANGLE, _angle_max);
 	DDX_Control(pDX, IDC_IMAGE3, _drawerRestored);
+	DDX_Text(pDX, IDC_R, _R);
 }
 
 BEGIN_MESSAGE_MAP(CTomogramDlg, CDialogEx)
@@ -172,7 +174,7 @@ void CTomogramDlg::RotateImage(double angle, const imageType & dataIn,
 	}
 }
 
-void CTomogramDlg::RotateFullImage(double angle, const imageType & dataIn,	imageType & dataOut)
+void CTomogramDlg::RotateFullImage(double angle, const imageType & dataIn, imageType & dataOut)
 {
 	const int size = dataIn.size();
 	dataOut.clear();
@@ -205,8 +207,12 @@ void CTomogramDlg::IncreaseSizeImage()
 	const int sizeNew = (int)sqrt(_image.size()*_image.size() + _image[0].size()*_image[0].size());
 	const int widthOld = _image[0].size(),
 		heightOld = _image.size();
+	originalW = widthOld;
+	originalH = heightOld;
 	const int sizeNewHalf = sizeNew / 2;
 
+	offsetY = sizeNewHalf - heightOld / 2;
+	offsetX = sizeNewHalf - widthOld / 2;
 	_imageIncreased.clear();
 	std::vector<float> row(sizeNew);
 	_imageIncreased.resize(sizeNew, row);
@@ -259,7 +265,7 @@ void CTomogramDlg::OnBnClickedTomogram()
 	_imageTomogram.clear();
 
 	//Create indexes of columns for radon converting
-	for (size_t i = 0; i < _imageIncreased.size(); i+=step)
+	for (size_t i = 0; i < _imageIncreased.size(); i += step)
 	{
 		indexes.push_back(i);
 	}
@@ -269,7 +275,7 @@ void CTomogramDlg::OnBnClickedTomogram()
 		auto row = CreateTomogramRow(angle, indexes);
 		_imageTomogram.push_back(row);
 	}
-	
+
 	NormalizeAmplitude(_imageTomogram);
 	drawerTomogram.Invalidate();
 	int widthText = _imageTomogram[0].size(),
@@ -300,7 +306,7 @@ void CTomogramDlg::NormalizeAmplitude(imageType &data)
 			data[i][j] = data[i][j] / max * 255.0;
 		}
 	}
-	
+
 }
 
 void CTomogramDlg::BackProjection(imageType & dataOut)
@@ -309,7 +315,7 @@ void CTomogramDlg::BackProjection(imageType & dataOut)
 	const size_t step = _step_d;
 
 	const int size = _imageIncreased.size();
-	
+
 	dataOut.clear();
 	std::vector<float> row(size);
 	dataOut.resize(size, row);
@@ -327,7 +333,7 @@ void CTomogramDlg::BackProjection(imageType & dataOut)
 	for (double angle = 0; angle < _angle_max; angle += angleStep)
 	{
 		RotateFullImage(angle, dataIn, dataOut);
-		
+
 		//
 #pragma omp parallel for
 		for (int row = 0; row < indexes.size(); row++)
@@ -349,50 +355,409 @@ void CTomogramDlg::BackProjection(imageType & dataOut)
 
 void CTomogramDlg::OnBnClickedRestore()
 {
-	FourierTransform(_imageTomogram, _imageRestored);
+	UpdateData(TRUE);
+	int width = 0;
+	int height = 0;
+
 	BackProjection(_imageRestored);
-	NormalizeAmplitude(_imageRestored);
-	_drawerRestored._image = &_imageRestored;
+	imageType bufferImage;
+	RotateFullImage(-90, _imageRestored, bufferImage);
+	swap(_imageRestored, bufferImage);
+	ReduceImage(_imageRestored, _imageRestoredReduced);
+	int newWidth = _imageRestoredReduced[0].size();
+	int newHeight = _imageRestoredReduced.size();
+
+	InterpolateImage(_imageRestoredReduced, width, height);
+	FourierTransform(_imageRestoredReduced, -1);
+	AddFilter();
+	FourierTransform(_imageRestoredReduced, 1);
+	InterpolateImage(_imageRestoredReduced, newWidth, newHeight);
+	NormalizeAmplitude(_imageRestoredReduced);
+	_drawerRestored._image = &_imageRestoredReduced;
 	_drawerRestored.RedrawWindow();
-	//FourierTransform(_imageTomogram, _imageRestored);
 }
 
-void CTomogramDlg::FourierTransform(imageType & dataIn, imageType & dataSpectre)
+void CTomogramDlg::Fourie1D(std::vector<cmplx> *data, int n, int is)
 {
-	const int nRows = dataIn.size();
-	const int nCols = dataIn[0].size();
-	for (int rowIdx = 0; rowIdx < nRows; rowIdx++)
-	{		
-		/*std::vector<complex<float>> row(nCols, 0);
-		for (int colIdx = 0; colIdx < nCols; colIdx++)
+	int i, j, istep;
+	int m, mmax;
+	float r, r1, theta, w_r, w_i, temp_r, temp_i;
+	float pi = 3.1415926f;
+
+	r = pi * is;
+	j = 0;
+	for (i = 0; i < n; i++)
+	{
+		if (i < j)
 		{
-			row[colIdx]._Val[0] = dataIn[rowIdx][colIdx];
-		}*/
-		fftw_complex* rowIn = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * nCols);
-		fftw_complex* rowOut = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * nCols);
-		for (int colIdx = 0; colIdx < nCols; colIdx++)
+			temp_r = (*data)[j].real;
+			temp_i = (*data)[j].image;
+			(*data)[j].real = (*data)[i].real;
+			(*data)[j].image = (*data)[i].image;
+			(*data)[i].real = temp_r;
+			(*data)[i].image = temp_i;
+		}
+		m = n >> 1;
+		while (j >= m) { j -= m; m = (m + 1) / 2; }
+		j += m;
+	}
+	mmax = 1;
+	while (mmax < n)
+	{
+		istep = mmax << 1;
+		r1 = r / (float)mmax;
+		for (m = 0; m < mmax; m++)
 		{
-			rowIn[colIdx][0] = dataIn[rowIdx][colIdx];
-			rowIn[colIdx][1] = 0;
+			theta = r1 * m;
+			w_r = (float)cos((double)theta);
+			w_i = (float)sin((double)theta);
+			for (i = m; i < n; i += istep)
+			{
+				j = i + mmax;
+				temp_r = w_r * (*data)[j].real - w_i * (*data)[j].image;
+				temp_i = w_r * (*data)[j].image + w_i * (*data)[j].real;
+				(*data)[j].real = (*data)[i].real - temp_r;
+				(*data)[j].image = (*data)[i].image - temp_i;
+				(*data)[i].real += temp_r;
+				(*data)[i].image += temp_i;
+			}
+		}
+		mmax = istep;
+	}
+	if (is > 0)
+		for (i = 0; i < n; i++)
+		{
+			(*data)[i].real /= (float)n;
+			(*data)[i].image /= (float)n;
 		}
 
-		/*fftw_plan plan = fftw_plan_dft_1d(row.size(), (fftw_complex*)&row[0],
-							(fftw_complex*)&row[0], FFTW_FORWARD, FFTW_ESTIMATE);*/
 
-		fftw_plan plan = fftw_plan_dft_1d(nCols, rowIn, rowOut, FFTW_FORWARD, FFTW_ESTIMATE);
+}
 
-		fftw_execute(plan);
-		fftw_destroy_plan(plan);
+void CTomogramDlg::Fourie2D(std::vector<std::vector<cmplx>> &data, int is)
+{
+	int width = data[0].size();
+	int height = data.size();
+#pragma omp parallel for
+	for (int i = 0; i < height; i++)
+	{
+		Fourie1D(&data[i], width, is);
+	}
 
-		for (int colIdx = 0; colIdx < nCols; colIdx++)
+	std::vector<std::vector<cmplx>> bufRes;
+	for (int i = 0; i < width; i++)
+	{
+		std::vector<cmplx> buffer;
+		for (int j = 0; j < height; j++)
 		{
-			dataIn[rowIdx][colIdx] = sqrt(rowOut[colIdx][0]* rowOut[colIdx][0] +
-				rowOut[colIdx][1] * rowOut[colIdx][1]);
+			buffer.push_back(data[j][i]);
 		}
+		bufRes.push_back(buffer);
+	}
 
-		fftw_free(rowIn);
-		fftw_free(rowOut);
+#pragma omp parallel for
+	for (int i = 0; i < width; i++)
+	{
+		Fourie1D(&bufRes[i], height, is);
+	}
+
+	data.clear();
+	data = bufRes;
+}
+
+void CTomogramDlg::InterpolateImage(imageType &image, int &newWidth, int &newHeight)
+{
+	int width = image[0].size(),
+		height = image.size();
+	if ((newWidth == 0) && (newHeight == 0))
+	{
+		CheckBin(width, newWidth);
+		CheckBin(height, newHeight);
 
 	}
-	int k = 0;
+
+	float stepX = (float)width / (newWidth + 1.0);
+	float stepY = (float)height / (newHeight + 1.0);
+	imageType tempData;
+
+	for (int h = 0; h < height; h++)
+	{
+		std::vector<float> bufLine;
+		for (int i = 0; i < newWidth; i++)
+		{
+			float x = i * stepX;
+			for (int w = 1; w < width; w++)
+			{
+				if ((x >= w - 1) && (x < w))
+				{
+					float value = (float)(image[h][w] - image[h][w - 1])*x +
+						(float)(image[h][w - 1] - (image[h][w] - image[h][w - 1])*((float)w - 1.f));
+					bufLine.emplace_back(value);
+				}
+			}
+		}
+		tempData.emplace_back(bufLine);
+	}
+
+	imageType transponData;
+	for (int i = 0; i < newWidth; i++)
+	{
+		std::vector<float> bufCol;
+		for (int j = 0; j < height; j++)
+		{
+			bufCol.emplace_back(tempData[j][i]);
+		}
+		transponData.emplace_back(bufCol);
+	}
+
+	tempData.clear();
+
+	width = transponData[0].size();
+	height = transponData.size();
+
+	newWidth = newHeight;
+	for (int h = 0; h < height; h++)
+	{
+		std::vector<float> bufLine;
+		for (int i = 0; i < newWidth; i++)
+		{
+			double x = i * stepY;
+			for (int w = 1; w < width; w++)
+			{
+				if ((x >= w - 1) && (x < w))
+				{
+					float value = (float)(transponData[h][w] - transponData[h][w - 1])*x +
+						(float)(transponData[h][w - 1] - (transponData[h][w] - transponData[h][w - 1])*((float)w - 1.f));
+					bufLine.emplace_back(value);
+				}
+			}
+		}
+		tempData.emplace_back(bufLine);
+	}
+
+	transponData.clear();
+	for (int i = 0; i < newWidth; i++)
+	{
+		std::vector<float> bufCol;
+		for (int j = 0; j < newHeight; j++)
+		{
+			bufCol.emplace_back(tempData[j][i]);
+		}
+		transponData.emplace_back(bufCol);
+	}
+
+	image = transponData;
+}
+
+bool CTomogramDlg::CheckBin(int value, int &newvalue)
+{
+	bool result;
+	int tempVal = value;
+	if (tempVal <= 0)
+		return false;
+	while ((tempVal % 2) == 0)
+	{
+		if ((tempVal /= 2) == 1)
+		{
+			newvalue = tempVal;
+			return true;
+		}
+	}
+
+	int initValue = 1;
+	while (initValue <= value)
+	{
+		initValue *= 2;
+	}
+	newvalue = initValue;
+
+	return false;
+}
+
+void CTomogramDlg::FourierTransform(imageType &image, int flag)
+{
+	if (flag == -1)
+	{
+		std::vector<std::vector<cmplx>> image_cmplx;
+		int width = image[0].size();
+		int height = image.size();
+
+		for (int i = 0; i < height; i++)
+		{
+			std::vector<cmplx> buffer;
+			for (int j = 0; j < width; j++)
+			{
+				cmplx value;
+				value.image = 0;
+				value.real = image[i][j];
+				buffer.emplace_back(value);
+			}
+			image_cmplx.emplace_back(buffer);
+		}
+		Fourie2D(image_cmplx, flag);
+
+		for (int i = 0; i < height; i++)
+		{
+			for (int j = 0; j < width; j++)
+			{
+				double val = sqrt(image_cmplx[j][i].image*image_cmplx[j][i].image + image_cmplx[j][i].real*image_cmplx[j][i].real);
+				if (val < 0) val = 0;
+				image[i][j] = val;
+			}
+		}
+		std::swap(image_cmplx, spectre_cmplx);
+	}
+	else
+	{
+		std::vector<std::vector<cmplx>> image_cmplx;
+		int width = image[0].size();
+		int height = image.size();
+
+		for (int i = 0; i < height; i++)
+		{
+			std::vector<cmplx> buffer;
+			for (int j = 0; j < width; j++)
+			{
+				cmplx value;
+				value.image = spectre_cmplx[i][j].image;
+				value.real = spectre_cmplx[i][j].real;
+				buffer.emplace_back(value);
+			}
+			image_cmplx.emplace_back(buffer);
+		}
+		Fourie2D(image_cmplx, flag);
+
+		for (int i = 0; i < height; i++)
+		{
+			for (int j = 0; j < width; j++)
+			{
+				double val = image_cmplx[j][i].real;
+				if (val < 0) val = 0;
+				image[i][j] = val;
+			}
+		}
+	}
+}
+
+void CTomogramDlg::NormilizeAmplitude(imageType &pData, int indentX, int indentY)
+{
+	double max = 0;
+
+	double height = pData.size(),
+		width = pData[0].size();
+
+	//#pragma omp parallel for
+	for (int i = 0; i < height; i++)
+	{
+		for (int j = 0; j < width; j++)
+		{
+			if (((j < indentX) && (i < indentY))
+				|| (((height - i) < indentY) && ((width - j) < indentX))
+				|| (((height - i) < indentY) && (j < indentX))
+				|| ((i < indentY) && ((width - j) < indentX)))
+				continue;
+			if (pData[i][j] > max) max = pData[i][j];
+		}
+	}
+	//#pragma omp parallel for
+	int pp = 0;
+	for (int i = 0; i < height; i++)
+	{
+		for (int j = 0; j < width; j++)
+		{
+			if (((j < indentX) && (i < indentY))
+				|| (((height - i) < indentY) && ((width - j) < indentX))
+				|| (((height - i) < indentY) && (j < indentX))
+				|| ((i < indentY) && ((width - j) < indentX)))
+			{
+				pData[i][j] = 255.f;
+				continue;
+			}
+			pData[i][j] = pData[i][j] / max * 255.f;
+		}
+	}
+}
+
+void CTomogramDlg::AddFilter()
+{
+	int height = spectre_cmplx.size(),
+		width = spectre_cmplx[0].size();
+
+	float R = _R;
+
+//#pragma omp parallel for
+//	for (int i = 0; i <= height / 2; i++)
+//	{
+//		for (int j = 0; j <= width / 2; j++)
+//		{
+//			if (sqrt(i*i + j * j) <= R)
+//			{
+//				spectre_cmplx[i][j].image *= (float)sqrt(i*i + j * j);
+//				spectre_cmplx[i][j].real *= (float)sqrt(i*i + j * j);
+//			}
+//		}
+//	}
+//#pragma omp parallel for
+//	for (int i = 0; i <= height / 2; i++)
+//	{
+//		for (int j = width - 1; j >= width / 2; j--)
+//		{
+//			if (sqrt(i*i + (width - 1 - j) *(width - 1 - j)) <= R)
+//			{
+//				spectre_cmplx[i][j].image *= (float)(sqrt(i*i + (width - 1 - j)*(width - 1 - j)));
+//				spectre_cmplx[i][j].real *= (float)(sqrt(i*i + (width - 1 - j)*(width - 1 - j)));
+//			}
+//		}
+//	}
+//#pragma omp parallel  for
+//	for (int i = height - 1; i >= height / 2; i--)
+//	{
+//		for (int j = 0; j <= width / 2; j++)
+//		{
+//			if (sqrt((height - 1 - i)*(height - 1 - i) + j * j) <= R)
+//			{
+//				spectre_cmplx[i][j].image *= (float)(sqrt((height - 1 - i)*(height - 1 - i) + j * j));
+//				spectre_cmplx[i][j].real *= (float)(sqrt((height - 1 - i)*(height - 1 - i) + j * j));
+//			}
+//		}
+//	}
+//
+//#pragma omp parallel  for
+//	for (int i = height - 1; i >= height / 2; i--)
+//	{
+//		for (int j = width - 1; j >= width / 2; j--)
+//		{
+//			if (sqrt((height - 1 - i)*(height - 1 - i) + (width - 1 - j) * (width - 1 - j)) <= R)
+//			{
+//				spectre_cmplx[i][j].image *= (float)(sqrt((height - 1 - i)*(height - 1 - i) + (width - 1 - j) * (width - 1 - j)));
+//				spectre_cmplx[i][j].real *= (float)(sqrt((height - 1 - i)*(height - 1 - i) + (width - 1 - j) * (width - 1 - j)));
+//			}
+//		}
+//	}	
+
+#pragma omp parallel for
+	for (int i = 0; i < height; i++)
+	{
+		for (int j = 0; j < width; j++)
+		{
+				spectre_cmplx[i][j].image *= (float)sqrt(i*i + j * j);
+				spectre_cmplx[i][j].real *= (float)sqrt(i*i + j * j);
+		}
+	}
+}
+
+void CTomogramDlg::ReduceImage(const imageType &dataIn, imageType &dataOut)
+{
+
+	std::vector<float> row(originalW);
+	dataOut.resize(originalH, row);
+
+//#pragma omp parallel for
+	for (int y = 0; y < originalH; y++)
+	{
+		for (int x = 0; x < originalW; x++)
+		{
+			dataOut[y][x] = dataIn[y+offsetY][x+offsetX];
+		}
+	}
 }
