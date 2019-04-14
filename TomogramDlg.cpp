@@ -1,19 +1,24 @@
-﻿
-// TomogramDlg.cpp: файл реализации
+﻿// TomogramDlg.cpp: файл реализации
 //
 
+#define _USE_MATH_DEFINES
 #include "stdafx.h"
 #include "Tomogram.h"
 #include "TomogramDlg.h"
 #include "afxdialogex.h"
 #include <numeric>
 #include <algorithm>
+#include <math.h>
+#include <fstream>
+
+
+#include "Eigen/Dense"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
 
-
+#define M_PI           3.14159265358979323846  /* pi */
 // Диалоговое окно CTomogramDlg
 
 
@@ -106,7 +111,6 @@ HCURSOR CTomogramDlg::OnQueryDragIcon()
 }
 
 
-
 void CTomogramDlg::OnBnClickedLoad()
 {
 	LoadPicture();
@@ -127,85 +131,29 @@ void CTomogramDlg::LoadPicture()
 
 	CString pathBMP = fd.GetPathName();
 	Bitmap bmp(pathBMP);
-	int width = bmp.GetWidth();
-	int height = bmp.GetHeight();
+	size_t width = bmp.GetWidth();
+	size_t height = bmp.GetHeight();
 	_image.clear();
 
-	for (size_t i = 0; i < height; i++)
+	for (int i = 0; i < height; i++)
 	{
 		std::vector<float> bufPix;
-		for (size_t j = 0; j < width; j++)
+		for (int j = 0; j < width; j++)
 		{
-			double value;
+			float value;
 			Color color;
-			bmp.GetPixel(j, height - i - 1, &color);
-			value = 0.299*color.GetRed() + 0.587*color.GetGreen() + 0.114*color.GetBlue();
+			bmp.GetPixel(j, (int)height - i - 1, &color);
+			value = 0.299F*color.GetRed() + 0.587F*color.GetGreen() + 0.114F*color.GetBlue();
 			bufPix.push_back(value);
 		}
 		_image.push_back(bufPix);
 	}
 }
 
-void CTomogramDlg::RotateImage(double angle, const imageType & dataIn,
-	imageType & dataOut, const std::vector<size_t> &indexes)
-{
-	const int size = dataIn.size();
-	dataOut.clear();
-	std::vector<float> row(size);
-	dataOut.resize(indexes.size(), row);
-
-	Matrix matrix;
-	Point pointNew;
-	const Point center(size / 2, size / 2);
-	matrix.Translate(center.X, center.Y);
-	matrix.Rotate(angle);
-
-	Rect rect(0, 0, size, size);
-	for (size_t y = 0; y < indexes.size(); y++)
-	{
-		for (int x = 0; x < size; x++)
-		{
-			pointNew.X = x - center.X;
-			pointNew.Y = indexes[y] - center.Y;
-			matrix.TransformPoints(&pointNew);
-			if (!rect.Contains(pointNew)) continue;
-			dataOut[y][x] = dataIn[pointNew.Y][pointNew.X];
-		}
-	}
-}
-
-void CTomogramDlg::RotateFullImage(double angle, const imageType & dataIn, imageType & dataOut)
-{
-	const int size = dataIn.size();
-	dataOut.clear();
-	std::vector<float> row(size);
-	dataOut.resize(size, row);
-
-	Matrix matrix;
-	Point pointNew;
-	const Point center(size / 2, size / 2);
-	matrix.Translate(center.X, center.Y);
-	matrix.Rotate(angle);
-
-	Rect rect(0, 0, size, size);
-	for (size_t y = 0; y < size; y++)
-	{
-		for (int x = 0; x < size; x++)
-		{
-			pointNew.X = x - center.X;
-			pointNew.Y = y - center.Y;
-			matrix.TransformPoints(&pointNew);
-			if (!rect.Contains(pointNew)) continue;
-			dataOut[y][x] = dataIn[pointNew.Y][pointNew.X];
-		}
-	}
-}
-
-
 void CTomogramDlg::IncreaseSizeImage()
 {
 	const int sizeNew = (int)sqrt(_image.size()*_image.size() + _image[0].size()*_image[0].size());
-	const int widthOld = _image[0].size(),
+	const size_t widthOld = _image[0].size(),
 		heightOld = _image.size();
 	originalW = widthOld;
 	originalH = heightOld;
@@ -226,7 +174,7 @@ void CTomogramDlg::IncreaseSizeImage()
 		}
 	}
 
-	int widthText = _imageIncreased[0].size(),
+	size_t widthText = _imageIncreased[0].size(),
 		heightText = _imageIncreased.size();
 	CString str, arg1, arg2;
 	str = "Resolution: ";
@@ -236,50 +184,32 @@ void CTomogramDlg::IncreaseSizeImage()
 	_resolutionText.SetWindowTextW(str);
 }
 
-
-
-std::vector<float> CTomogramDlg::CreateTomogramRow(double angle, const std::vector<size_t> &indexes)
-{
-	std::vector<float> outRow(indexes.size());
-	imageType rotatedCols;
-
-	//Rotate columns by indexes
-	RotateImage(angle, _imageIncreased, rotatedCols, indexes);
-
-	//Get point of Radon converting
-	for (size_t i = 0; i < indexes.size(); i++)
-	{
-		outRow[i] = std::accumulate(rotatedCols[i].begin(), rotatedCols[i].end(), 0);
-	}
-
-	return outRow;
-}
-
-
 void CTomogramDlg::OnBnClickedTomogram()
 {
 	UpdateData(TRUE);
 	const size_t step = _step_d;
 	const double angleStep = _step_a;
 	std::vector<size_t> indexes;
-	_imageTomogram.clear();
+	_vecRadonTransform.clear();
 
-	//Create indexes of columns for radon converting
-	for (size_t i = 0; i < _imageIncreased.size(); i += step)
+	int anglesCount = static_cast<int>(_angle_max / angleStep);
+
+	_vecRadonTransform = getRadonTransform(_image, anglesCount);
+
+	_vecProjectionsSVD.clear();
+	_vecProjectionsSVD.resize(_vecRadonTransform.size());
+
+	for (std::size_t idxEl{ 0U }; idxEl < _vecProjectionsSVD.size(); ++idxEl)
 	{
-		indexes.push_back(i);
+		_vecProjectionsSVD[idxEl] = _vecRadonTransform[idxEl].vecSpecificProjection;
 	}
 
-	for (double angle = 0; angle < _angle_max; angle += angleStep)
-	{
-		auto row = CreateTomogramRow(angle, indexes);
-		_imageTomogram.push_back(row);
-	}
+	NormalizeAmplitude(_vecProjectionsSVD);	
 
-	NormalizeAmplitude(_imageTomogram);
+	drawerTomogram._image = &_vecProjectionsSVD;
 	drawerTomogram.Invalidate();
-	int widthText = _imageTomogram[0].size(),
-		heightText = _imageTomogram.size();
+	int widthText = _vecProjectionsSVD[0].size(),
+		heightText = _vecProjectionsSVD.size();
 	CString str, arg1, arg2;
 	str = "Resolution: ";
 	arg1.Format(_T("%d"), widthText);
@@ -288,6 +218,91 @@ void CTomogramDlg::OnBnClickedTomogram()
 	str += " (n_projection x n_angle)";
 	_resolutionTomText.SetWindowTextW(str);
 }
+
+/** Вычислить преобразование Радона.
+* @param vecImage - изображение для вычисления преобразования.
+* @param numberAngles - число углов.
+*/
+std::vector<Projection> CTomogramDlg::getRadonTransform(const std::vector<std::vector<float>> & vecImage,
+	int anglesNumber)
+{
+	std::vector<Projection> vecProjections;
+	vecProjections.resize(anglesNumber + 1);
+	double stepAngle = M_PI / (anglesNumber + 1);
+
+	for (int idxAngle{ 0 }; idxAngle <= anglesNumber; ++idxAngle)
+	{
+		vecProjections[idxAngle] = getSpecificProjection(vecImage, idxAngle * stepAngle);
+	}
+
+	return vecProjections;
+}
+
+/** Вычислить проекцию для конкретного угла.
+* @param vecImage - изображение.
+* @param angle - конкретный угол.
+*/
+Projection CTomogramDlg::getSpecificProjection(const std::vector<std::vector<float>> & vecImage, double angle)
+{
+	int height = static_cast<int>(vecImage.size());
+	int width = static_cast<int>(vecImage[0].size());
+
+	int d = static_cast<int>((std::sqrt(width / 2 * width / 2 + height / 2 * height / 2)));
+	// image size
+	_d = 2 * static_cast<std::size_t>(d);
+
+	Projection projection;
+	int x, y;
+	std::vector<std::vector<int>> vecCoeffs;
+	vecCoeffs.resize(2 * d, std::vector<int>(2 * d, 0));
+
+	// per s
+	for (int s = -d; s < d; s += _step_d)
+	{
+		for (int idxEl{ 0 }; idxEl < vecCoeffs.size(); ++idxEl)
+		{
+			std::fill(vecCoeffs[idxEl].begin(), vecCoeffs[idxEl].end(), 0);
+		}
+
+		double sum = 0.0;
+		// per t
+		for (int t = -d; t < d; ++t)
+		{
+			coordTransform(s, t, x, y, angle);
+
+			int idxHeight = height / 2 + y;
+			int idxWidth = width / 2 + x;
+
+			if ((idxWidth >= 0) && (idxWidth < width) && (idxHeight >= 0) && (idxHeight < height))
+			{
+				sum += vecImage[idxHeight][idxWidth];
+			}
+			if ((d + x >= 0) && (d + x < 2 * d) && (d + y >= 0) && (d + y < 2 * d))
+			{
+				vecCoeffs[d + y][d + x] = 1;
+			}
+		}
+
+		projection.vecSpecificProjection.emplace_back(sum);
+		projection.vecCoeffs.emplace_back(vecCoeffs);
+	}
+
+	return projection;
+}
+
+/** Преобразовать координаты s, t в x, y.
+* @param s - координата по s.
+* @param t - координата по t.
+* @param x - координата по Ох.
+* @param y - координата по Оу.
+* @param theta - угол поворота.
+*/
+void CTomogramDlg::coordTransform(double s, double t, int&x, int&y, double theta)
+{
+	x = (int)(s * cos(theta) - t * sin(theta));
+	y = (int)(s * sin(theta) + t * cos(theta));
+}
+
 
 void CTomogramDlg::NormalizeAmplitude(imageType &data)
 {
@@ -303,55 +318,36 @@ void CTomogramDlg::NormalizeAmplitude(imageType &data)
 	{
 		for (int j = 0; j < data[i].size(); j++)
 		{
-			data[i][j] = data[i][j] / max * 255.0;
+			data[i][j] = data[i][j] / max * 255.0F;
 		}
 	}
 
 }
 
-void CTomogramDlg::BackProjection(imageType & dataOut)
+/** Линеаризовать систему уравнений.
+* @param p - вектор проекций.
+* @param a - матрица коэффициентов, которая будет линеразиована.
+* @param y - вектор значений проекций, который будет линеаризован.
+*/
+void CTomogramDlg::linearizeEquationsSystem(const std::vector<Projection> &p,
+	std::vector<std::vector<int>> & a, std::vector<float> & y)
 {
-	const double angleStep = _step_a;
-	const size_t step = _step_d;
-
-	const int size = _imageIncreased.size();
-
-	dataOut.clear();
-	std::vector<float> row(size);
-	dataOut.resize(size, row);
-
-	std::vector<size_t> indexes;
-	imageType dataIn;
-	dataIn.resize(size, row);
-
-	for (size_t i = 0; i < _imageIncreased.size(); i += step)
+	a.resize(p.size() * p[0].vecSpecificProjection.size());
+	for (std::size_t idxHeight{ 0U }; idxHeight < p.size(); ++idxHeight)
 	{
-		indexes.push_back(i);
-	}
-
-	size_t numProjection = 0;
-	for (double angle = 0; angle < _angle_max; angle += angleStep)
-	{
-		RotateFullImage(angle, dataIn, dataOut);
-
-		//
-#pragma omp parallel for
-		for (int row = 0; row < indexes.size(); row++)
+		for (std::size_t idxWidth{ 0U }; idxWidth < p[idxHeight].vecSpecificProjection.size(); ++idxWidth)
 		{
-			double value = _imageTomogram[numProjection][row] / indexes.size();
-			for (int col = 0; col < dataOut[0].size(); col++)
+			y.emplace_back(p[idxHeight].vecSpecificProjection[idxWidth]);
+			for (std::size_t k1{ 0U }; k1 < p[idxHeight].vecCoeffs[idxWidth].size(); ++k1)
 			{
-				dataOut[indexes[row]][col] += value;
+				for (std::size_t k2{ 0U }; k2 < p[idxHeight].vecCoeffs[idxWidth][k1].size(); ++k2)
+				{
+					a[idxHeight * p[idxHeight].vecSpecificProjection.size() + idxWidth].emplace_back(p[idxHeight].vecCoeffs[idxWidth][k1][k2]);
+				}
 			}
 		}
-
-		RotateFullImage(-angle, dataOut, dataIn);
-		numProjection++;
 	}
-
-	//std::swap(dataIn, dataOut);
 }
-
 
 void CTomogramDlg::OnBnClickedRestore()
 {
@@ -359,292 +355,43 @@ void CTomogramDlg::OnBnClickedRestore()
 	int width = 0;
 	int height = 0;
 
-	BackProjection(_imageRestored);
-	imageType bufferImage;
-	RotateFullImage(-90, _imageRestored, bufferImage);
-	swap(_imageRestored, bufferImage);
-	ReduceImage(_imageRestored, _imageRestoredReduced);
-	int newWidth = _imageRestoredReduced[0].size();
-	int newHeight = _imageRestoredReduced.size();
+	std::vector<std::vector<int>> vecCoeffs;
+	std::vector<float> vecY;
 
-	InterpolateImage(_imageRestoredReduced, width, height);
-	FourierTransform(_imageRestoredReduced, -1);
-	AddFilter();
-	FourierTransform(_imageRestoredReduced, 1);
-	InterpolateImage(_imageRestoredReduced, newWidth, newHeight);
-	NormalizeAmplitude(_imageRestoredReduced);
-	_drawerRestored._image = &_imageRestoredReduced;
+	linearizeEquationsSystem(_vecRadonTransform, vecCoeffs, vecY);
+
+	int nn = static_cast<int>(vecCoeffs[0].size());
+	int ny = static_cast<int>(vecY.size());
+
+	std::vector<double> vecX;
+	vecX.resize(nn, 0.0);
+
+	std::vector<int> vecA;
+	for (std::size_t idxHeight = 0; idxHeight < vecCoeffs.size(); ++idxHeight)
+	{
+		for (std::size_t idxWidth = 0; idxWidth < vecCoeffs[idxHeight].size(); ++idxWidth)
+		{
+			vecA.emplace_back(vecCoeffs[idxHeight][idxWidth]);
+		}
+	}
+
+	_imageRestored.clear();
+	_imageRestored.resize(_d, std::vector<float>(_d, 0.0));
+
+	SVD(vecA, _imageRestored, vecY, nn, ny);
+
+	NormalizeAmplitude(_imageRestored);
+
+	_drawerRestored._image = &_imageRestored;
 	_drawerRestored.RedrawWindow();
-}
-
-void CTomogramDlg::Fourie1D(std::vector<cmplx> *data, int n, int is)
-{
-	int i, j, istep;
-	int m, mmax;
-	float r, r1, theta, w_r, w_i, temp_r, temp_i;
-	float pi = 3.1415926f;
-
-	r = pi * is;
-	j = 0;
-	for (i = 0; i < n; i++)
-	{
-		if (i < j)
-		{
-			temp_r = (*data)[j].real;
-			temp_i = (*data)[j].image;
-			(*data)[j].real = (*data)[i].real;
-			(*data)[j].image = (*data)[i].image;
-			(*data)[i].real = temp_r;
-			(*data)[i].image = temp_i;
-		}
-		m = n >> 1;
-		while (j >= m) { j -= m; m = (m + 1) / 2; }
-		j += m;
-	}
-	mmax = 1;
-	while (mmax < n)
-	{
-		istep = mmax << 1;
-		r1 = r / (float)mmax;
-		for (m = 0; m < mmax; m++)
-		{
-			theta = r1 * m;
-			w_r = (float)cos((double)theta);
-			w_i = (float)sin((double)theta);
-			for (i = m; i < n; i += istep)
-			{
-				j = i + mmax;
-				temp_r = w_r * (*data)[j].real - w_i * (*data)[j].image;
-				temp_i = w_r * (*data)[j].image + w_i * (*data)[j].real;
-				(*data)[j].real = (*data)[i].real - temp_r;
-				(*data)[j].image = (*data)[i].image - temp_i;
-				(*data)[i].real += temp_r;
-				(*data)[i].image += temp_i;
-			}
-		}
-		mmax = istep;
-	}
-	if (is > 0)
-		for (i = 0; i < n; i++)
-		{
-			(*data)[i].real /= (float)n;
-			(*data)[i].image /= (float)n;
-		}
-
-
-}
-
-void CTomogramDlg::Fourie2D(std::vector<std::vector<cmplx>> &data, int is)
-{
-	int width = data[0].size();
-	int height = data.size();
-#pragma omp parallel for
-	for (int i = 0; i < height; i++)
-	{
-		Fourie1D(&data[i], width, is);
-	}
-
-	std::vector<std::vector<cmplx>> bufRes;
-	for (int i = 0; i < width; i++)
-	{
-		std::vector<cmplx> buffer;
-		for (int j = 0; j < height; j++)
-		{
-			buffer.push_back(data[j][i]);
-		}
-		bufRes.push_back(buffer);
-	}
-
-#pragma omp parallel for
-	for (int i = 0; i < width; i++)
-	{
-		Fourie1D(&bufRes[i], height, is);
-	}
-
-	data.clear();
-	data = bufRes;
-}
-
-void CTomogramDlg::InterpolateImage(imageType &image, int &newWidth, int &newHeight)
-{
-	int width = image[0].size(),
-		height = image.size();
-	if ((newWidth == 0) && (newHeight == 0))
-	{
-		CheckBin(width, newWidth);
-		CheckBin(height, newHeight);
-
-	}
-
-	float stepX = (float)width / (newWidth + 1.0);
-	float stepY = (float)height / (newHeight + 1.0);
-	imageType tempData;
-
-	for (int h = 0; h < height; h++)
-	{
-		std::vector<float> bufLine;
-		for (int i = 0; i < newWidth; i++)
-		{
-			float x = i * stepX;
-			for (int w = 1; w < width; w++)
-			{
-				if ((x >= w - 1) && (x < w))
-				{
-					float value = (float)(image[h][w] - image[h][w - 1])*x +
-						(float)(image[h][w - 1] - (image[h][w] - image[h][w - 1])*((float)w - 1.f));
-					bufLine.emplace_back(value);
-				}
-			}
-		}
-		tempData.emplace_back(bufLine);
-	}
-
-	imageType transponData;
-	for (int i = 0; i < newWidth; i++)
-	{
-		std::vector<float> bufCol;
-		for (int j = 0; j < height; j++)
-		{
-			bufCol.emplace_back(tempData[j][i]);
-		}
-		transponData.emplace_back(bufCol);
-	}
-
-	tempData.clear();
-
-	width = transponData[0].size();
-	height = transponData.size();
-
-	newWidth = newHeight;
-	for (int h = 0; h < height; h++)
-	{
-		std::vector<float> bufLine;
-		for (int i = 0; i < newWidth; i++)
-		{
-			double x = i * stepY;
-			for (int w = 1; w < width; w++)
-			{
-				if ((x >= w - 1) && (x < w))
-				{
-					float value = (float)(transponData[h][w] - transponData[h][w - 1])*x +
-						(float)(transponData[h][w - 1] - (transponData[h][w] - transponData[h][w - 1])*((float)w - 1.f));
-					bufLine.emplace_back(value);
-				}
-			}
-		}
-		tempData.emplace_back(bufLine);
-	}
-
-	transponData.clear();
-	for (int i = 0; i < newWidth; i++)
-	{
-		std::vector<float> bufCol;
-		for (int j = 0; j < newHeight; j++)
-		{
-			bufCol.emplace_back(tempData[j][i]);
-		}
-		transponData.emplace_back(bufCol);
-	}
-
-	image = transponData;
-}
-
-bool CTomogramDlg::CheckBin(int value, int &newvalue)
-{
-	bool result;
-	int tempVal = value;
-	if (tempVal <= 0)
-		return false;
-	while ((tempVal % 2) == 0)
-	{
-		if ((tempVal /= 2) == 1)
-		{
-			newvalue = tempVal;
-			return true;
-		}
-	}
-
-	int initValue = 1;
-	while (initValue <= value)
-	{
-		initValue *= 2;
-	}
-	newvalue = initValue;
-
-	return false;
-}
-
-void CTomogramDlg::FourierTransform(imageType &image, int flag)
-{
-	if (flag == -1)
-	{
-		std::vector<std::vector<cmplx>> image_cmplx;
-		int width = image[0].size();
-		int height = image.size();
-
-		for (int i = 0; i < height; i++)
-		{
-			std::vector<cmplx> buffer;
-			for (int j = 0; j < width; j++)
-			{
-				cmplx value;
-				value.image = 0;
-				value.real = image[i][j];
-				buffer.emplace_back(value);
-			}
-			image_cmplx.emplace_back(buffer);
-		}
-		Fourie2D(image_cmplx, flag);
-
-		for (int i = 0; i < height; i++)
-		{
-			for (int j = 0; j < width; j++)
-			{
-				double val = sqrt(image_cmplx[j][i].image*image_cmplx[j][i].image + image_cmplx[j][i].real*image_cmplx[j][i].real);
-				if (val < 0) val = 0;
-				image[i][j] = val;
-			}
-		}
-		std::swap(image_cmplx, spectre_cmplx);
-	}
-	else
-	{
-		std::vector<std::vector<cmplx>> image_cmplx;
-		int width = image[0].size();
-		int height = image.size();
-
-		for (int i = 0; i < height; i++)
-		{
-			std::vector<cmplx> buffer;
-			for (int j = 0; j < width; j++)
-			{
-				cmplx value;
-				value.image = spectre_cmplx[i][j].image;
-				value.real = spectre_cmplx[i][j].real;
-				buffer.emplace_back(value);
-			}
-			image_cmplx.emplace_back(buffer);
-		}
-		Fourie2D(image_cmplx, flag);
-
-		for (int i = 0; i < height; i++)
-		{
-			for (int j = 0; j < width; j++)
-			{
-				double val = image_cmplx[j][i].real;
-				if (val < 0) val = 0;
-				image[i][j] = val;
-			}
-		}
-	}
 }
 
 void CTomogramDlg::NormilizeAmplitude(imageType &pData, int indentX, int indentY)
 {
-	double max = 0;
+	float max = 0;
 
-	double height = pData.size(),
-		width = pData[0].size();
+	double height = (double)pData.size(),
+		width = (double)pData[0].size();
 
 	//#pragma omp parallel for
 	for (int i = 0; i < height; i++)
@@ -678,86 +425,68 @@ void CTomogramDlg::NormilizeAmplitude(imageType &pData, int indentX, int indentY
 	}
 }
 
-void CTomogramDlg::AddFilter()
+void CTomogramDlg::SVD(std::vector<int> &matrixA, std::vector<std::vector<float>> &x, std::vector<float> & b, int nn, int ny)
 {
-	int height = spectre_cmplx.size(),
-		width = spectre_cmplx[0].size();
-
-	float R = _R;
-
-//#pragma omp parallel for
-//	for (int i = 0; i <= height / 2; i++)
-//	{
-//		for (int j = 0; j <= width / 2; j++)
-//		{
-//			if (sqrt(i*i + j * j) <= R)
-//			{
-//				spectre_cmplx[i][j].image *= (float)sqrt(i*i + j * j);
-//				spectre_cmplx[i][j].real *= (float)sqrt(i*i + j * j);
-//			}
-//		}
-//	}
-//#pragma omp parallel for
-//	for (int i = 0; i <= height / 2; i++)
-//	{
-//		for (int j = width - 1; j >= width / 2; j--)
-//		{
-//			if (sqrt(i*i + (width - 1 - j) *(width - 1 - j)) <= R)
-//			{
-//				spectre_cmplx[i][j].image *= (float)(sqrt(i*i + (width - 1 - j)*(width - 1 - j)));
-//				spectre_cmplx[i][j].real *= (float)(sqrt(i*i + (width - 1 - j)*(width - 1 - j)));
-//			}
-//		}
-//	}
-//#pragma omp parallel  for
-//	for (int i = height - 1; i >= height / 2; i--)
-//	{
-//		for (int j = 0; j <= width / 2; j++)
-//		{
-//			if (sqrt((height - 1 - i)*(height - 1 - i) + j * j) <= R)
-//			{
-//				spectre_cmplx[i][j].image *= (float)(sqrt((height - 1 - i)*(height - 1 - i) + j * j));
-//				spectre_cmplx[i][j].real *= (float)(sqrt((height - 1 - i)*(height - 1 - i) + j * j));
-//			}
-//		}
-//	}
-//
-//#pragma omp parallel  for
-//	for (int i = height - 1; i >= height / 2; i--)
-//	{
-//		for (int j = width - 1; j >= width / 2; j--)
-//		{
-//			if (sqrt((height - 1 - i)*(height - 1 - i) + (width - 1 - j) * (width - 1 - j)) <= R)
-//			{
-//				spectre_cmplx[i][j].image *= (float)(sqrt((height - 1 - i)*(height - 1 - i) + (width - 1 - j) * (width - 1 - j)));
-//				spectre_cmplx[i][j].real *= (float)(sqrt((height - 1 - i)*(height - 1 - i) + (width - 1 - j) * (width - 1 - j)));
-//			}
-//		}
-//	}	
-
-#pragma omp parallel for
-	for (int i = 0; i < height; i++)
+	//std::ofstream out;
+	Eigen::MatrixXf As(ny, nn);
+	Eigen::VectorXf bb(ny);
+	for (int i = 0; i < ny; ++i)
 	{
-		for (int j = 0; j < width; j++)
+		for (int j = 0; j < nn; ++j)
 		{
-				spectre_cmplx[i][j].image *= (float)sqrt(i*i + j * j);
-				spectre_cmplx[i][j].real *= (float)sqrt(i*i + j * j);
+			As(i, j) = static_cast<float>(matrixA[i*nn + j]);
+		}
+		bb(i) = b[i];
+	}
+
+	/*out.open("A.txt");
+	if (out.is_open()) 
+	{
+		for (int i = 0; i < ny; ++i)
+		{
+			for (int j = 0; j < nn; ++j)
+			{
+				out<<As(i, j)<<" ";
+			}
+			out << std::endl;
+		}
+	} 
+	out.close();*/
+
+	/*out.open("y.txt");
+	if (out.is_open())
+	{
+		for (int i = 0; i < ny; ++i)
+		{
+			out << bb(i);
+			out << std::endl;
 		}
 	}
-}
+	out.close();*/
 
-void CTomogramDlg::ReduceImage(const imageType &dataIn, imageType &dataOut)
-{
 
-	std::vector<float> row(originalW);
-	dataOut.resize(originalH, row);
+	Eigen::VectorXf Xs =  As.bdcSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(bb);
 
-//#pragma omp parallel for
-	for (int y = 0; y < originalH; y++)
+	x.clear();
+	std::vector<float> row(_d, 0.0);
+	x.resize(_d, row);
+	   	 
+	/*out.open("x.txt");
+	if (out.is_open()) {
+		out << Xs << endl;
+	} out.close();*/
+
+	//out.open("x.txt");
+	for (int i = 0; i < _d; ++i)
 	{
-		for (int x = 0; x < originalW; x++)
+		for (int j = 0; j < _d; ++j)
 		{
-			dataOut[y][x] = dataIn[y+offsetY][x+offsetX];
+			x[i][j] = Xs(i*_d+j);
+			if (x[i][j] < 0) x[i][j] = 0;
+			//out << x[i][j] << " ";
 		}
+
+		//out << std::endl;
 	}
+	//out.close();
 }

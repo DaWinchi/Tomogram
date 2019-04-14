@@ -117,7 +117,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_WINDOWS;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <OpenMPSupport>true</OpenMPSupport>
-      <AdditionalIncludeDirectories>F:\Learning\Masters\1 course\2 semestr\Tomography\Tomogram\fftw;F:\Learning\Masters\1 course\2 semestr\Tomography\Tomogram\opencv\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>F:\Learning\Masters\1 course\2 semestr\Tomography\Tomogram\Eigen;F:\Learning\Masters\1 course\2 semestr\Tomography\Tomogram\fftw;F:\Learning\Masters\1 course\2 semestr\Tomography\Tomogram\opencv\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -171,7 +171,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_WINDOWS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <OpenMPSupport>true</OpenMPSupport>
-      <AdditionalIncludeDirectories>F:\Learning\Masters\1 course\2 semestr\Tomography\Tomogram\fftw;F:\Learning\Masters\1 course\2 semestr\Tomography\Tomogram\opencv\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>F:\Learning\Masters\1 course\2 semestr\Tomography\Tomogram\Eigen;F:\Learning\Masters\1 course\2 semestr\Tomography\Tomogram\fftw;F:\Learning\Masters\1 course\2 semestr\Tomography\Tomogram\opencv\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
